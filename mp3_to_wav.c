@@ -13,7 +13,7 @@
 
 static void usage()
 {
-    printf("Usage: mp3_to_wav <input> <output> [s16|f32 [ <buffersize>]]\n");
+    printf("Usage: mp3_to_wav <input> <output> [s16|f32 [<buffersize>]]\n");
 }
 
 static void cleanup(mpg123_handle *mh)
@@ -75,6 +75,10 @@ int main(int argc, char *argv[])
         return -1;
     }
 
+    printf("Rate     : %li\n", rate);
+    printf("Channel  : %d\n", channels);
+    printf("Encodeing: %#08X\n", encoding);
+
     if (encoding != MPG123_ENC_SIGNED_16 && encoding != MPG123_ENC_FLOAT_32) {
         /*
          * Signed 16 is the default output format anyways; it would actually by only different if we forced it.
@@ -124,7 +128,14 @@ int main(int argc, char *argv[])
      * Important, especially for sndfile writing, is that the size is a multiple of sample size.
      */
     buffer_size = (argc >= 5) ? atol(argv[4]) : mpg123_outblock(mh);
+    printf("Buffer size: %li\n", buffer_size);
     buffer = malloc(buffer_size);
+    if (buffer == NULL) {
+        fprintf(stderr, "Fail to allocate buffer!\n");
+        sf_close(sndfile);
+        cleanup(mh);
+        return -3;
+    }
 
     do {
         sf_count_t more_samples;
@@ -149,10 +160,11 @@ int main(int argc, char *argv[])
                 err == MPG123_ERR ? mpg123_strerror(mh) : mpg123_plain_strerror(err));
     }
 
-    sf_close(sndfile);
-
     samples /= channels;
     printf("%li samples written.\n", (long)samples);
+
+    free(buffer);
+    sf_close(sndfile);
     cleanup(mh);
 
     return 0;
