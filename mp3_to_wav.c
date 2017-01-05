@@ -57,18 +57,20 @@ int main(int argc, char *argv[])
         return -1;
     }
 
+    mpg123_param(mh, MPG123_RESYNC_LIMIT, -1, 0);
+    mpg123_param(mh, MPG123_INDEX_SIZE, -1, 0);
+
     /* Simple hack to enable floating point output. */
     if (argc >= 4 && !strcmp(argv[3], "f32")) {
         mpg123_param(mh, MPG123_ADD_FLAGS, MPG123_FORCE_FLOAT, 0.);
     }
-
 
     if (    mpg123_open(mh, argv[1]) != MPG123_OK
             /* Let mpg123 work with the file, that excludes MPG123_NEED_MORE messages. */
             || mpg123_getformat(mh, &rate, &channels, &encoding) != MPG123_OK
             /* Peek into track and get first output format. */
        ) {
-        fprintf( stderr, "Trouble with mpg123: %s\n", mpg123_strerror(mh) );
+        fprintf(stderr, "Trouble with mpg123: %s\n", mpg123_strerror(mh));
         cleanup(mh);
         return -1;
     }
@@ -82,6 +84,23 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Bad encoding: 0x%x!\n", encoding);
         return -2;
     }
+
+    /*
+     * Scan mp3 file and dump its seek index.
+     */
+    off_t* offsets;
+    off_t step;
+    size_t fill, i;
+
+    mpg123_scan(mh);
+    mpg123_index(mh, &offsets, &step, &fill);
+
+    printf("Total frames: %li\n", fill);
+#if 0
+    for (i = 0; i < fill; i++) {
+        printf("Frame number %li: file offset %li\n", i * step, offsets[i]);
+    }
+#endif
 
     /* Ensure that this output format will not change (it could, when we allow it). */
     mpg123_format_none(mh);
