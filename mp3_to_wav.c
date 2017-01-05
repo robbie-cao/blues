@@ -10,6 +10,66 @@
 #include <mpg123.h>
 #include <sndfile.h>
 
+static const char *modes[5]    = { "Stereo", "Joint-Stereo", "Dual-Channel", "Single-Channel", "Invalid" };
+static const char *smodes[5]   = { "stereo", "j-s", "dual", "mono", "o.O" };
+static const char *layers[4]   = { "Unknown" , "I", "II", "III" };
+static const char *versions[4] = { "1.0", "2.0", "2.5", "x.x" };
+static const int samples_per_frame[4][4] =
+{
+    { -1 , 384 , 1152 , 1152 } , /* MPEG 1 */
+    { -1 , 384 , 1152 , 576  } , /* MPEG 2 */
+    { -1 , 384 , 1152 , 576  } , /* MPEG 2.5 */
+    { -1 , -1  , -1   , -1   } , /* Unknown */
+};
+
+void print_header(mpg123_handle *mh)
+{
+    struct mpg123_frameinfo i;
+
+    mpg123_info(mh, &i);
+    if (i.mode > 4 || i.mode < 0) {
+        i.mode = 4;
+    }
+    if (i.version > 3 || i.version < 0) {
+        i.version = 3;
+    }
+    if (i.layer > 3 || i.layer < 0) {
+        i.layer = 0;
+    }
+    fprintf(stderr,"MPEG %s, Layer: %s, Freq: %ld, Mode: %s, Modext: %d, BPF : %d\n",
+            versions[i.version],
+            layers[i.layer],
+            i.rate,
+            modes[i.mode],
+            i.mode_ext,
+            i.framesize);
+    fprintf(stderr,"Channels: %d, Copyright: %s, Original: %s, CRC: %s, Emphasis: %d.\n",
+            i.mode == MPG123_M_MONO ? 1 : 2,
+            i.flags & MPG123_COPYRIGHT ? "Yes" : "No",
+            i.flags & MPG123_ORIGINAL ? "Yes" : "No",
+            i.flags & MPG123_CRC ? "Yes" : "No",
+            i.emphasis);
+    fprintf(stderr,"Bitrate: ");
+    switch (i.vbr) {
+        case MPG123_CBR:
+            if (i.bitrate) {
+                fprintf(stderr, "%d kbit/s", i.bitrate);
+            } else {
+                fprintf(stderr, "%d kbit/s (free format)", (int)((double)(i.framesize+4)*8*i.rate*0.001/samples_per_frame[i.version][i.layer]+0.5));
+            }
+            break;
+        case MPG123_VBR:
+            fprintf(stderr, "VBR");
+            break;
+        case MPG123_ABR:
+            fprintf(stderr, "%d kbit/s ABR", i.abr_rate);
+            break;
+        default:
+            fprintf(stderr, "???");
+            break;
+    }
+    fprintf(stderr, "\nExtension value: %d\n", i.flags & MPG123_PRIVATE ? 1 : 0);
+}
 
 static void usage()
 {
@@ -78,6 +138,7 @@ int main(int argc, char *argv[])
     printf("Rate     : %li\n", rate);
     printf("Channel  : %d\n", channels);
     printf("Encodeing: %#08X\n", encoding);
+    print_header(mh);
 
     if (encoding != MPG123_ENC_SIGNED_16 && encoding != MPG123_ENC_FLOAT_32) {
         /*
@@ -105,6 +166,7 @@ int main(int argc, char *argv[])
         printf("Frame number %li: file offset %li\n", i * step, offsets[i]);
     }
 #endif
+    printf("Total samples: %li\n", mpg123_length(mh));
 
     /* Ensure that this output format will not change (it could, when we allow it). */
     mpg123_format_none(mh);
@@ -139,6 +201,7 @@ int main(int argc, char *argv[])
 
     do {
         sf_count_t more_samples;
+
         err = mpg123_read(mh, buffer, buffer_size, &done);
         more_samples = (encoding == MPG123_ENC_SIGNED_16)
             ? sf_write_short(sndfile, (short*)buffer, done / sizeof(short))
